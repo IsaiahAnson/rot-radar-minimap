@@ -27,13 +27,14 @@ local TOGGLE_KEY = Key.M
 local MAP_SIZE = 300
 local MARGIN = 25
 -- ------------------------- R.E.P.O.-inspired palette ----------------------
--- no backing panel: the map floats over the game, outlined for readability
-local BG_COLOR = { R = 0.015, G = 0.03, B = 0.05, A = 0.0 } -- disabled
-local BG_PAD = 10
-local OUTLINE_COLOR = { R = 0.04, G = 0.08, B = 0.12, A = 0.8 } -- dark edge
-local OUTLINE_FRAC = 0.16 -- outline thickness as a fraction of tile size
-local ROOM_COLOR = { R = 0.84, G = 0.89, B = 0.85, A = 0.66 } -- mint-white
-local START_COLOR = { R = 0.2, G = 0.9, B = 0.4, A = 0.9 } -- spawn elevator
+-- backing panel disabled: the thick dark outlines carry the contrast even
+-- at max gamma (confirmed by testing); the map floats clean over the game
+local BG_COLOR = { R = 0.015, G = 0.03, B = 0.05, A = 0.0 }
+local BG_PAD = 8
+local OUTLINE_COLOR = { R = 0.01, G = 0.02, B = 0.04, A = 0.92 } -- dark edge
+local OUTLINE_FRAC = 0.2 -- outline thickness as a fraction of tile size
+local ROOM_COLOR = { R = 0.84, G = 0.89, B = 0.85, A = 0.8 } -- mint-white
+local START_COLOR = { R = 0.15, G = 0.85, B = 0.35, A = 1.0 } -- spawn elevator
 -- tiles you walked through that no dungeon array describes (static level
 -- geometry like stair hallways) get auto-mapped in this shade
 local SHOW_TRAIL = false -- explored-tile tracer dots (off for release)
@@ -45,7 +46,7 @@ local FLOOR_BAND = 600 -- world units of height per floor band
 -- bigger than the real room); shown dim until you actually walk them
 -- these are REAL rooms (they appear on the game's own table map), just with
 -- bounding-box precision - drawn as a clearly visible mid-tone layer
-local HINT_COLOR = { R = 0.42, G = 0.47, B = 0.52, A = 0.5 }
+local HINT_COLOR = { R = 0.36, G = 0.42, B = 0.5, A = 0.6 }
 local MARKER_COLOR = { R = 1.0, G = 0.32, B = 0.18, A = 1.0 }
 -- teammates: drawn as squares in each player's replicated spark color
 local SHOW_TEAMMATES = true
@@ -544,12 +545,16 @@ local function Build()
     local haloSlot = canvas:AddChildToCanvas(halo)
     local marker = StaticConstructObject(imgClass, wt, FName("GRMM_Marker"))
     local markerSlot = canvas:AddChildToCanvas(marker)
+    -- small "nose" drawn ahead of the marker in the facing direction
+    local nose = StaticConstructObject(imgClass, wt, FName("GRMM_Nose"))
+    local noseSlot = canvas:AddChildToCanvas(nose)
 
     S.anchoredRight = pcall(function()
         local anchors = { Minimum = { X = 1.0, Y = 0.0 }, Maximum = { X = 1.0, Y = 0.0 } }
         bgSlot:SetAnchors(anchors)
         haloSlot:SetAnchors(anchors)
         markerSlot:SetAnchors(anchors)
+        noseSlot:SetAnchors(anchors)
         for _, e in ipairs(pool) do e.slot:SetAnchors(anchors) end
         for _, e in ipairs(team) do e.slot:SetAnchors(anchors) end
     end)
@@ -558,6 +563,7 @@ local function Build()
         bg:SetColorAndOpacity(BG_COLOR)
         halo:SetColorAndOpacity({ R = 1, G = 1, B = 1, A = 0.85 })
         marker:SetColorAndOpacity(MARKER_COLOR)
+        nose:SetColorAndOpacity({ R = 1, G = 1, B = 1, A = 0.95 })
     end)
 
     widget:AddToViewport(50)
@@ -565,6 +571,7 @@ local function Build()
 
     W.widget, W.canvas, W.bg, W.marker = widget, canvas, bg, marker
     W.halo, W.haloSlot = halo, haloSlot
+    W.nose, W.noseSlot = nose, noseSlot
     W.bgSlot, W.markerSlot, W.pool, W.team = bgSlot, markerSlot, pool, team
     S.built = true
     Log("widget built (" .. #pool .. " run slots, anchor="
@@ -593,8 +600,15 @@ local function ApplyLayout()
         S.baseX = MARGIN
         S.baseY = MARGIN
     end
-    -- background panel removed: collapse it and let the map float
-    pcall(function() W.bg:SetVisibility(1) end)
+    pcall(function()
+        if BG_COLOR.A > 0 then
+            W.bg:SetVisibility(3)
+            W.bgSlot:SetPosition({ X = S.baseX - BG_PAD, Y = S.baseY - BG_PAD })
+            W.bgSlot:SetSize({ X = S.size + 2 * BG_PAD, Y = S.size + 2 * BG_PAD })
+        else
+            W.bg:SetVisibility(1)
+        end
+    end)
     if not S.rects then return end
 
     local minX, minY, maxX, maxY
@@ -795,6 +809,15 @@ local function UpdateMarker()
         W.haloSlot:SetPosition({ X = px - h / 2, Y = py - h / 2 })
         W.haloSlot:SetSize({ X = h, Y = h })
         W.halo:SetRenderTransformAngle(ang)
+        -- direction nose: small white square ahead of the marker.
+        -- screen angle 0 = facing right, clockwise positive, y down
+        local rad = math.rad(ang)
+        local n = math.max(3, m * 0.45)
+        local nx = px + math.cos(rad) * (m * 0.85)
+        local ny = py + math.sin(rad) * (m * 0.85)
+        W.noseSlot:SetPosition({ X = nx - n / 2, Y = ny - n / 2 })
+        W.noseSlot:SetSize({ X = n, Y = n })
+        W.nose:SetRenderTransformAngle(ang)
     end)
 
     -- teammates: every pawn in the replicated PlayerArray except our own,
@@ -981,14 +1004,27 @@ local function Resize(delta)
     UpdateMarker()
 end
 
-pcall(function()
-    RegisterKeyBind(Key.ADD, function()
-        ExecuteInGameThread(function() pcall(Resize, SIZE_STEP) end)
-    end)
-    RegisterKeyBind(Key.SUBTRACT, function()
-        ExecuteInGameThread(function() pcall(Resize, -SIZE_STEP) end)
-    end)
-end)
+-- resize on numpad +/- AND the main-row -/= keys left of Backspace
+-- (player feedback: tenkeyless keyboards have no numpad)
+do
+    local function BindResize(names, delta)
+        for _, name in ipairs(names) do
+            local key = Key[name]
+            if key then
+                local ok = pcall(function()
+                    RegisterKeyBind(key, function()
+                        ExecuteInGameThread(function() pcall(Resize, delta) end)
+                    end)
+                end)
+                if ok then return end
+            end
+        end
+    end
+    BindResize({ "ADD" }, SIZE_STEP)
+    BindResize({ "SUBTRACT" }, -SIZE_STEP)
+    BindResize({ "OEM_PLUS", "EQUALS" }, SIZE_STEP)
+    BindResize({ "OEM_MINUS", "MINUS" }, -SIZE_STEP)
+end
 
 -- live calibration: nudge marker+trail in quarter-tile steps on screen.
 -- Home = up, End = down, Delete = left, Insert = right. Read values with F9.
@@ -1168,4 +1204,4 @@ ExecuteInGameThread(function()
     pcall(RemoveStrays)
 end)
 
-Log("v28 loaded (tracer dots removed). M = toggle, +/- = resize, Home/End/Del/Ins = nudge, F9 = debug, F8 = dump.")
+Log("v30 loaded (backing panel removed, outlines carry contrast). M = toggle, +/-/= = resize, F9 = debug, F8 = dump.")

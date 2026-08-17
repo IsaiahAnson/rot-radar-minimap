@@ -16,7 +16,7 @@ direction you walked out of it is always "up" on the map, every run.
 | Key | Action |
 |---|---|
 | **M** | Toggle the minimap |
-| **Numpad + / -** | Resize |
+| **+ / -** | Resize (numpad or the keys left of Backspace) |
 | **Home / End / Delete / Insert** | Nudge map position on screen |
 | **F9** | Debug info dump (UE4SS console) |
 | **F8** | Dungeon grid dump (for bug reports) |
