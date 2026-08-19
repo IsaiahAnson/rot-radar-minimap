@@ -41,7 +41,8 @@ local START_COLOR = { R = 0.35, G = 1.0, B = 0.6, A = 0.85 } -- spawn elevator
 -- floor, so the map completes itself where the ice cave and similar
 -- unenumerable geometry live. Independent of SHOW_TRAIL (route dots).
 -- DEFAULT OFF (v86): same A/B. Note this is the only source that can ever
--- draw the ice cave, so switch it on with F2 when exploring unmapped areas.
+-- draw the ice cave. v89 removed the F2 preset cycler, so to see unmapped
+-- static geometry flip this flag here - there is no key for it any more.
 local FILL_UNMAPPED = false
 local SHOW_TRAIL = false -- explored-tile tracer dots (off for release)
 local TRAIL_COLOR = { R = 0.3, G = 0.75, B = 0.62, A = 0.66 } -- teal
@@ -69,11 +70,17 @@ local PREFAB_SCAN_BUDGET = 4000
 -- v83: navmesh as a floor source. Proven by the F7 probe to find the
 -- corridors no mesh source exposes. Z extent is generous so a tile is still
 -- found when the pawn stands a floor above or below it.
--- DEFAULT OFF (v86): user A/B-d all four source combinations across five
--- cycles and judged "rooms + floor meshes" the most accurate every time.
--- Navmesh contributed only 46 tiles once tuned safe and degraded the shape.
--- Kept behind F2 - the probe evidence that it SEES real corridors stands.
-local NAVMESH_FILL = false
+-- v91 DEFAULT ON - FINAL (user's call, 2026-08-19 evening, after comparing
+-- the local build against the released 1.1.1 back to back): "rooms + floor
+-- + navmesh is more accurate overall". This flag flipped three times today
+-- while the comparisons stabilised; the early verdicts were unreliable
+-- because the 0.80 acceptance gate was secretly discarding the floor layer
+-- (fixed in v87), so only judgements made after that were against real
+-- floor data. Navmesh's measured contribution: 41 / 4 / 6 tiles across
+-- three dungeons, guard healthy each time.
+-- The F2 preset cycler is REMOVED (v89) - this flag is fixed at load; edit
+-- it here to change the floor plan.
+local NAVMESH_FILL = true
 local NAV_FILL_MARGIN = 3     -- tiles beyond the known bbox to probe
 local NAV_QUERY_XY = 25.0   -- tight horizontal query; big extents snap
 local NAV_SNAP_MAX = 60.0   -- reject if projection moved further than this
@@ -3207,40 +3214,14 @@ pcall(function()
     end)
 end)
 
--- F2: flip how the marker maps into the hosted panel (cropped sub-rect vs
--- full texture). Only two possibilities and the wrong one is obvious on
--- screen, so a live toggle settles it in seconds instead of a restart each.
-pcall(function()
-    RegisterKeyBind(Key.F2, function()
-        ExecuteInGameThread(function()
-            pcall(function()
-                -- REPURPOSED: the 8 marker conventions are dead since v64 put
-                -- the marker back on the grid path. F2 now selects which axis
-                -- F11/F12 scale, which is what actually needs tuning.
-                -- v67: F2 flips the one remaining unknown - does the panel
-                -- show only the dungeon content, or the whole texture?
-                -- v85: REPURPOSED again. The image path is parked, so the
-                -- anchor toggle is dead weight - whereas FOUR floor sources
-                -- now stack (rooms, floor meshes, navmesh, walked tiles) and
-                -- nothing could tell them apart on screen. Cycle them so the
-                -- source responsible for any wrong tile is visible directly
-                -- instead of inferred from a screenshot.
-                local m = ((S.srcMode or 1) + 1) % 4
-                S.srcMode = m
-                USE_FLOOR_MESHES = m >= 1
-                NAVMESH_FILL     = m >= 2
-                FILL_UNMAPPED    = m >= 3
-                local names = { [0] = "rooms only",
-                                [1] = "rooms + floor meshes (default)",
-                                [2] = "rooms + floor + navmesh",
-                                [3] = "rooms + floor + navmesh + walked" }
-                Log("floor sources " .. m .. "/3: " .. names[m])
-                S.dungSig = nil     -- force a re-parse with the new set
-                S.floorRejected = nil
-            end)
-        end)
-    end)
-end)
+-- F2 (v89): REMOVED. It cycled the four floor-source presets live (rooms /
+-- +floor meshes / +navmesh / +walked), which existed to A/B them against
+-- each other. The verdict is baked into the flags at the top of the file
+-- (see USE_FLOOR_MESHES / NAVMESH_FILL / FILL_UNMAPPED), and after the user reported the other
+-- presets taking over their pick, the losing presets are gone rather than
+-- gated: nothing in the mod reassigns USE_FLOOR_MESHES / NAVMESH_FILL /
+-- FILL_UNMAPPED after load any more. To experiment again, edit those flags
+-- directly - there is deliberately no key for them.
 
 -- F5: game map <-> vector map, live. This is the A/B switch AND the escape
 -- hatch: if the hosted widget renders wrong, one key gets the working vector
@@ -3512,4 +3493,4 @@ ExecuteInGameThread(function()
     pcall(RemoveStrays)
 end)
 
-Log("v87 loaded (floor gate 0.80 -> 0.60; a rejected scan no longer disables the streaming rescans), F11/F12 = size, F4 = native orientation, F5 = game map on/off, F9 = debug, F8 = dump.")
+Log("v91 loaded (floor plan locked: rooms + floor meshes + navmesh; F2 preset cycling removed), F11/F12 = size, F4 = native orientation, F5 = game map on/off, F9 = debug, F8 = dump.")
