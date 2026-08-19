@@ -123,7 +123,18 @@ local FLOOR_ADD_COMPONENT_LOC = false
 -- is whether the tiles land inside the dungeon's known FOOTPRINT at all
 -- (rooms OR the prefab bounding boxes); a broken transform scatters them far
 -- outside it.
-local FLOOR_MIN_INSIDE = 0.80
+-- v87: 0.80 -> 0.60. The shipped 1.1.0 silently fell back to ROOMS ONLY on a
+-- live run (seed 19095, 2026-08-19): candidates scored 58 / 36 / 78%, so the
+-- proven rotation+location conversion WON BY 20 POINTS and was thrown away for
+-- being two points under the bar. The absolute score is not a measure of
+-- correctness - the "footprint" it is scored against is rooms + prefab boxes,
+-- and static level geometry (snow caves, mine tunnels, stair halls) appears in
+-- NO dungeon array, so a dungeon with more of it scores LOWER precisely
+-- because it has more of the geometry this pass exists to reveal. Same trap as
+-- the pre-v68 gate, one level up. 0.60 still clears the two wrong conversions
+-- (27-58% measured across two runs), and a bad accept is visible instantly and
+-- undoable with F2, whereas a bad reject is invisible and permanent.
+local FLOOR_MIN_INSIDE = 0.60
 -- Drop floor tiles that fall outside every known room AND every prefab box.
 -- Those are 200x200 pieces tucked under walls or spilling past doorways, and
 -- drawing them made corridors read wider than they are in game. Tiles inside
@@ -1008,6 +1019,9 @@ local function ParseDungeon(d, names)
                 for key in pairs(floorTiles) do occ[key] = true end
                 if clipped > 0 then
                     nFloor = nFloor - clipped
+                    -- stats were stamped BEFORE the clip, so "map built" was
+                    -- still quoting the pre-clip count (274 drawn as 225)
+                    stats.floorTiles = nFloor
                     Log(string.format(
                         "floor clipped %d stray tile(s) outside the known footprint (wall bleed beside per-tile geometry; unmapped rooms kept)",
                         clipped))
@@ -1018,10 +1032,22 @@ local function ParseDungeon(d, names)
             else
                 if nFloor > 0 then
                     Log(string.format(
-                        "floor data rejected (%d tiles, only %d%% inside the known footprint)",
-                        nFloor, math.floor(frac * 100)))
-                    S.floorRejected = true -- stop rescanning; it will not improve
+                        "floor data REJECTED (%d tiles, only %d%% inside the known footprint, need %d%%) -> the map is drawing ROOMS ONLY, prefab rooms will look like plain boxes",
+                        nFloor, math.floor(frac * 100),
+                        math.floor(FLOOR_MIN_INSIDE * 100)))
+                    -- v87: do NOT latch while streaming rescans remain. The
+                    -- parse runs ~0.1s after the dungeon appears, and geometry
+                    -- streams in AFTER generation - which is the entire reason
+                    -- FLOOR_RESCANS exists. Latching here switched off the very
+                    -- retries that could have raised the score, so one early
+                    -- reading disabled floor detail for the whole run.
+                    if (S.floorScans or 0) >= FLOOR_RESCANS then
+                        S.floorRejected = true
+                        Log("floor: rescan budget spent, staying on rooms only for this dungeon")
+                    end
                 end
+                stats.floorTiles = 0        -- report what was USED, not what was read
+                stats.floorRead  = nFloor
                 floorTiles, nFloor = {}, 0
             end
         end
@@ -2429,8 +2455,15 @@ local function EnsureMapData()
         end
     end
     ApplyLayout()
-    Log(string.format("map built: %d runs, floor tiles=%d, rot=%d aq=%d (elev yaw=%s), ext=%d",
-        #rects, (geo.stats and geo.stats.floorTiles) or 0,
+    -- v87: this line used to print the tiles READ even when the gate threw them
+    -- away, so a rooms-only map logged "floor tiles=251" and looked healthy.
+    -- Print what was actually drawn, and say so when floor was discarded.
+    local st = geo.stats or {}
+    Log(string.format("map built: %d runs, floor tiles=%d%s, rot=%d aq=%d (elev yaw=%s), ext=%d",
+        #rects, st.floorTiles or 0,
+        (st.floorRead and st.floorRead > 0)
+            and string.format(" (ROOMS ONLY - %d floor tiles discarded by the gate)", st.floorRead)
+            or "",
         geo.rot, geo.aq, tostring(geo.yaw), geo.ext))
     return true
 end
@@ -3479,4 +3512,4 @@ ExecuteInGameThread(function()
     pcall(RemoveStrays)
 end)
 
-Log("v86 loaded (default = rooms + floor meshes, the combination you judged best), F11/F12 = size, F4 = native orientation, F5 = game map on/off, F9 = debug, F8 = dump.")
+Log("v87 loaded (floor gate 0.80 -> 0.60; a rejected scan no longer disables the streaming rescans), F11/F12 = size, F4 = native orientation, F5 = game map on/off, F9 = debug, F8 = dump.")
