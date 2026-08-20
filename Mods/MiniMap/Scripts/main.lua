@@ -70,17 +70,15 @@ local PREFAB_SCAN_BUDGET = 4000
 -- v83: navmesh as a floor source. Proven by the F7 probe to find the
 -- corridors no mesh source exposes. Z extent is generous so a tile is still
 -- found when the pawn stands a floor above or below it.
--- v91 DEFAULT ON - FINAL (user's call, 2026-08-19 evening, after comparing
--- the local build against the released 1.1.1 back to back): "rooms + floor
--- + navmesh is more accurate overall". This flag flipped three times today
--- while the comparisons stabilised; the early verdicts were unreliable
--- because the 0.80 acceptance gate was secretly discarding the floor layer
--- (fixed in v87), so only judgements made after that were against real
--- floor data. Navmesh's measured contribution: 41 / 4 / 6 tiles across
--- three dungeons, guard healthy each time.
--- The F2 preset cycler is REMOVED (v89) - this flag is fixed at load; edit
--- it here to change the floor plan.
-local NAVMESH_FILL = true
+-- v93 DEFAULT OFF - SHIPPING (2026-08-20): rooms-only won the final
+-- three-way comparison; see USE_FLOOR_MESHES above. Navmesh's measured
+-- contribution was real but small (41 / 4 / 6 tiles across three dungeons,
+-- snap guard healthy each time) and it rode on top of the floor layer,
+-- which is itself off now. Flip BOTH flags together to restore the 1.2.0
+-- plan. The F2 preset cycler is REMOVED (v89) - flags are fixed at load.
+-- (History: v88/v91 defaulted this ON, v90/v92 OFF - verdicts made before
+-- the v87 gate fix were invalid, and the user re-judged after it.)
+local NAVMESH_FILL = false
 local NAV_FILL_MARGIN = 3     -- tiles beyond the known bbox to probe
 local NAV_QUERY_XY = 25.0   -- tight horizontal query; big extents snap
 local NAV_SNAP_MAX = 60.0   -- reject if projection moved further than this
@@ -150,10 +148,17 @@ local FLOOR_CLIP_STRAYS = true
 -- a prefab box is replaced by real floor only when floor actually covers it,
 -- so thin floor data can never make a room vanish
 local FLOOR_BOX_REPLACE = 0.35
-local USE_FLOOR_MESHES = true -- was OFF: instance transforms never resolved to
--- world space correctly (7% overlap with the real rooms), so the data is not
--- trustworthy. The sanity gate below rejects it anyway; the flag just avoids
--- paying for the scan. F7 still probes it if we ever want to revisit.
+-- v93 DEFAULT OFF - SHIPPING (2026-08-20): after a full three-way live
+-- comparison (rooms only / +floor meshes / +floor+navmesh, each played on
+-- real runs across two days), the user judged the plain rooms-only plan the
+-- most accurate overall and shipped it as 1.3.0. The generator's room grid
+-- tracks the real layout consistently; the mesh-derived detail added ragged
+-- edges and occasional wall-bleed that read worse in play. With this false,
+-- nFloor stays 0, so the prefab replace/scan/drop pipeline never runs and
+-- every prefab box draws whole. The entire floor pipeline (collector, 3-way
+-- transform scoring, 0.60 gate, stray clipping, box replacement) stays in
+-- the file and working - flip this to true for the 1.1.0-1.2.0 look.
+local USE_FLOOR_MESHES = false
 local FLOOR_MESH_MATCH = "floor" -- mesh name must contain this...
 local FLOOR_MESH_REJECT = "roof" -- ...and must not contain this
 local FLOOR_SCAN_BUDGET = 40000  -- max instances read in one scan
@@ -3493,4 +3498,4 @@ ExecuteInGameThread(function()
     pcall(RemoveStrays)
 end)
 
-Log("v91 loaded (floor plan locked: rooms + floor meshes + navmesh; F2 preset cycling removed), F11/F12 = size, F4 = native orientation, F5 = game map on/off, F9 = debug, F8 = dump.")
+Log("v93 loaded (default = rooms only, the plan that won the three-way comparison; floor meshes + navmesh available as flags), F11/F12 = size, F4 = native orientation, F5 = game map on/off, F9 = debug, F8 = dump.")
