@@ -1,8 +1,8 @@
-<img src="icon.png" width="128" align="right" alt="RotRadarMinimap icon">
-
 # Rot Radar Minimap
 
 [**Get it on Thunderstore**](https://thunderstore.io/c/grain-rot/p/Mentalize/RotRadarMinimap/)
+
+<img src="icon.png" width="120" align="right" alt="RotRadarMinimap icon">
 
 **R.E.P.O.-style toggleable minimap for Grain Rot.**
 
