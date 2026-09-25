@@ -70,3 +70,9 @@ never during a level transition) applies changes without restarting.
 
 Runs on [RE-UE4SS](https://github.com/UE4SS-RE/RE-UE4SS). Signature fixes
 from UE4SS issue #1228.
+
+## License
+
+Copyright (c) 2026 Isaiah Anson. All rights reserved. You may use the released software for
+personal, non-commercial use; copying, modifying or redistributing it requires written
+permission. See [LICENSE](LICENSE).
